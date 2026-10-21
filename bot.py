@@ -5,11 +5,11 @@ import discord
 from discord.ext import commands
 from google import genai
 
-# Çevre Değişkenlerinden (Environment Variables) Key ve Token çekme
+# Çevre Değişkenlerinden (Environment Variables) Token ve Key çekme
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Gemini Yapay Zeka Ayarı
+# Gemini Yapay Zeka Ayarı (Güncel ve Kararlı Model)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 class MyBot(commands.Bot):
@@ -43,7 +43,7 @@ async def on_message(message):
     if icerek in ["sa", "s.a", "s.a.", "selam", "selamun aleykum", "selamün aleyküm"] or icerek.startswith("sa "):
         await message.channel.send(f"Aleykümselam {message.author.mention}, naber la?")
 
-    # 2. Tamamen İnsan Gibi Saran Kanka Sohbeti
+    # 2. Tamamen İnsan Gibi Saran Kanka Sohbeti (Gemini Destekli)
     elif bot.user.mentioned_in(message):
         prompt = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
         
@@ -57,12 +57,12 @@ async def on_message(message):
                 
                 try:
                     response = ai_client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-1.5-flash',
                         contents=f"{system_prompt}\nKullanıcı dedi ki: {prompt}"
                     )
                     await message.reply(response.text)
                 except Exception as e:
-                    await message.reply("Kanka sunucu şu an biraz yoğun, tekrar yazsana bi.")
+                    await message.reply(f"Kanka bi hata çıktı ama hallederiz: {e}")
 
     await bot.process_commands(message)
 
@@ -94,7 +94,7 @@ async def ekle(ctx, emoji: discord.PartialEmoji, name: str = None):
     try:
         image_bytes = await emoji.read()
         new_emoji = await ctx.guild.create_custom_emoji(name=name, image=image_bytes)
-        await ctx.send(f"Ekeledim emojiyi, hayırlı olsun: {new_emoji}")
+        await ctx.send(f"Ekledim emojiyi, hayırlı olsun: {new_emoji}")
     except Exception as e:
         await ctx.send(f"Ekleyemedim kanka hata çıktı: {e}")
 
