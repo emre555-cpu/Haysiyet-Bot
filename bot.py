@@ -3,201 +3,159 @@ import os
 import logging
 import discord
 from discord.ext import commands
-from google import genai
+
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("kankabot")
-
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+log = logging.getLogger("bot")
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-ai_client = None
 
 
 @bot.event
 async def on_ready():
-    global ai_client
-
-    if GEMINI_API_KEY and ai_client is None:
-        ai_client = genai.Client(api_key=GEMINI_API_KEY)
-
-    print(f">>> {bot.user} kanka modunda aktif! <<<")
+    log.info("Bot aktif: %s", bot.user)
+    log.info("Sunucu sayısı: %s", len(bot.guilds))
 
 
+# Yeni üye karşılama
 @bot.event
 async def on_member_join(member):
-    channel = discord.utils.get(
+    kanal = discord.utils.get(
         member.guild.text_channels, name="hosgeldin"
     )
-
-    if channel:
-        await channel.send(
+    if kanal:
+        await kanal.send(
             f"Ooo {member.mention} gelmiş! 🥳 "
-            "Hoş geldin kanka, adını yaşını yaz da kaydını yapalım."
+            "Hoş geldin kanka! Adını ve yaşını yaz, kaydını yapalım."
         )
 
 
-@bot.event
-async def on_message(message):
-    if message.author.bot:
+# Selamlaşma
+@bot.listen("on_message")
+async def selam_cevapla(message):
+    if message.author.bot or not message.guild:
         return
 
-    icerik = message.content.lower().strip()
+    metin = message.content.lower().strip()
 
-    selamlar = [
+    selamlar = {
         "sa", "s.a", "s.a.", "selam",
-        "selamun aleykum", "selamün aleyküm"
-    ]
+        "selamün aleyküm", "selamun aleykum"
+    }
 
-    if icerik in selamlar or icerik.startswith("sa "):
+    if metin in selamlar:
         await message.channel.send(
-            f"Aleykümselam {message.author.mention}, naber la?"
+            f"Aleykümselam {message.author.mention}, naber kanka? 😎"
         )
 
-    elif bot.user and bot.user.mentioned_in(message):
-        prompt = message.content
-        prompt = prompt.replace(f"<@{bot.user.id}>", "")
-        prompt = prompt.replace(f"<@!{bot.user.id}>", "")
-        prompt = prompt.strip()
 
-        if prompt:
-            if not ai_client:
-                await message.reply(
-                    "Kanka Gemini API Key ayarlanmamış, sahibime söyle!"
-                )
-            else:
-                system_prompt = (
-                    "Sen Discord'da samimi, mizahi, genç bir kankasın. "
-                    "Kanka, la, olum gibi kelimeleri dozunda kullan. "
-                    "Doğal, kısa ve konuya uygun cevap ver. "
-                    "Gereksiz resmiyetten ve uzun açıklamalardan kaçın."
-                )
-
-                try:
-                    async with message.channel.typing():
-                        response = await (
-                            ai_client.aio.models.generate_content(
-                                model="gemini-2.5-flash",
-                                contents=(
-                                    f"{system_prompt}\n"
-                                    f"Kullanıcı dedi ki: {prompt}"
-                                )
-                            )
-                        )
-
-                    cevap = response.text
-                    if cevap:
-                        await message.reply(cevap[:2000])
-                    else:
-                        await message.reply(
-                            "Kanka bu sefer cevap çıkaramadım, bi daha dene."
-                        )
-
-                except Exception:
-                    logger.exception("Gemini yanıt hatası")
-                    await message.reply(
-                        "Kanka cevap verirken bir sorun çıktı, birazdan dene."
-                    )
-
-    await bot.process_commands(message)
+# Yardım
+@bot.command(name="yardim", aliases=["yardım", "help"])
+async def yardim(ctx):
+    await ctx.send(
+        "**Kanka Bot Komutları**\n"
+        "`!ping` — Bot çalışıyor mu?\n"
+        "`!kayit @üye İsim 20` — Üyeyi kaydet\n"
+        "`!ekle :emoji:` — Özel emoji ekle\n"
+        "`!yardim` — Komutları göster"
+    )
 
 
+# Bağlantı testi
 @bot.command()
+async def ping(ctx):
+    await ctx.send(f"Bot aktif! 🟢 Gecikme: {round(bot.latency * 1000)} ms")
+
+
+# Üye kayıt
+@bot.command(name="kayit", aliases=["kayıt"])
+@commands.guild_only()
 @commands.has_permissions(manage_roles=True)
-async def kayit(ctx, member: discord.Member, isim: str, yas: int):
-    if not 1 <= yas <= 99:
-        await ctx.send("Kanka, geçerli bir yaş gir.")
+async def kayit(ctx, member: discord.Member, *, bilgi: str):
+    parcalar = bilgi.rsplit(" ", 1)
+
+    if len(parcalar) != 2 or not parcalar[1].isdigit():
+        await ctx.send("Kullanım: `!kayit @üye Ahmet 20`")
+        return
+
+    isim, yas_metni = parcalar
+    yas = int(yas_metni)
+
+    if not 1 <= yas <= 99 or not isim.strip():
+        await ctx.send("Geçerli bir isim ve yaş gir kanka.")
         return
 
     rol = discord.utils.get(ctx.guild.roles, name="Üye")
+    bot_uye = ctx.guild.me
 
-    if not rol:
-        await ctx.send("Kanka, sunucuda 'Üye' rolü bulunamadı.")
+    if rol is None:
+        await ctx.send("Sunucuda **Üye** rolü bulunamadı.")
         return
 
-    if rol >= ctx.guild.me.top_role:
-        await ctx.send(
-            "Kanka, botun rolünü sunucu ayarlarından 'Üye' rolünün "
-            "üstüne taşıman lazım."
-        )
+    if bot_uye is None or rol >= bot_uye.top_role:
+        await ctx.send("Botun rolünü **Üye** rolünün üstüne taşı.")
         return
 
-    if member.top_role >= ctx.guild.me.top_role:
-        await ctx.send("Bu üyenin rolü botun rolüne eşit veya daha yüksek.")
+    if member.top_role >= bot_uye.top_role:
+        await ctx.send("Bu üyenin rolü botun rolünden yüksek veya eşit.")
         return
 
     try:
-        yeni_isim = f"{isim} | {yas}"
+        await member.edit(nick=f"{isim.strip()} | {yas}")
         await member.add_roles(rol, reason=f"Kayıt: {ctx.author}")
-        await member.edit(nick=yeni_isim)
         await ctx.send(
-            f"Tamamdır {member.mention}! İsmin **{yeni_isim}** oldu "
-            "ve Üye rolünü aldın. 🔥"
+            f"Tamamdır {member.mention}! **{isim.strip()} | {yas}** "
+            "olarak kaydoldun. 🔥"
         )
     except discord.Forbidden:
-        await ctx.send(
-            "Botun yetkisi yetersiz. Rol sırasını ve izinlerini kontrol et."
-        )
+        await ctx.send("Botun rol veya takma ad değiştirme yetkisini kontrol et.")
     except discord.HTTPException:
-        await ctx.send("Kanka, işlem tamamlanamadı. Tekrar dene.")
+        await ctx.send("Kayıt sırasında Discord hatası oluştu.")
 
 
-@bot.command()
+# Özel emoji ekleme
+@bot.command(name="ekle")
+@commands.guild_only()
 @commands.has_permissions(manage_emojis_and_stickers=True)
-async def ekle(ctx, emoji: discord.PartialEmoji, name: str = None):
-    if not ctx.guild:
-        return
-
+async def ekle(ctx, emoji: discord.PartialEmoji, isim: str = None):
     if not emoji.is_custom_emoji():
-        await ctx.send("Kanka, özel bir Discord emojisi göndermen lazım.")
+        await ctx.send("Kanka, özel bir Discord emojisi göndermelisin.")
         return
-
-    emoji_adi = name or emoji.name or "yeni_emoji"
 
     try:
-        image_bytes = await emoji.read()
-        yeni_emoji = await ctx.guild.create_custom_emoji(
-            name=emoji_adi,
-            image=image_bytes
+        yeni = await ctx.guild.create_custom_emoji(
+            name=isim or emoji.name or "yeni_emoji",
+            image=await emoji.read()
         )
-        await ctx.send(f"Ekledim emojiyi, hayırlı olsun: {yeni_emoji}")
-
+        await ctx.send(f"Emoji eklendi: {yeni}")
     except discord.Forbidden:
-        await ctx.send(
-            "Botun emoji ekleme yetkisi yok kanka."
-        )
+        await ctx.send("Botun emoji ekleme yetkisi yok.")
     except discord.HTTPException:
-        await ctx.send(
-            "Emoji eklenemedi. Emoji sınırını ve adını kontrol et."
-        )
+        await ctx.send("Emoji eklenemedi; sunucu sınırını kontrol et.")
 
 
+# Komut hataları
 @bot.event
 async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send("Kanka, bu komut için yetkin yok.")
+        await ctx.send("Bu komut için yetkin yok kanka.")
     elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(
-            "Komut eksik kanka. Örnek: `!kayit @üye Ahmet 20`"
-        )
+        await ctx.send("Komut eksik. `!yardim` yazarak örneklere bak.")
     elif isinstance(error, commands.BadArgument):
-        await ctx.send(
-            "Kullanım hatalı. Örnek: `!kayit @üye Ahmet 20`"
-        )
+        await ctx.send("Üyeyi etiketlediğinden ve komutu doğru yazdığından emin ol.")
     else:
-        logger.error("Komut hatası: %s", error)
-        await ctx.send("Komut çalışırken bir hata oluştu.")
+        log.error("Komut hatası: %s", error)
+        await ctx.send("Bir hata oluştu. Render loglarını kontrol et.")
 
 
 if __name__ == "__main__":
-    if not DISCORD_TOKEN:
-        raise RuntimeError(
-            "DISCORD_TOKEN çevre değişkeni bulunamadı!"
-        )
-
-    bot.run(DISCORD_TOKEN)
+    if not TOKEN:
+        raise RuntimeError("Render Environment bölümünde DISCORD_TOKEN eksik!")
+    bot.run(TOKEN)
