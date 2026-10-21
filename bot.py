@@ -5,7 +5,7 @@ import asyncio
 from google import genai
 
 # Gemini Yapay Zeka Ayarı
-ai_client = genai.Client(api_key="GEMINI_API_KEY")
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
@@ -102,4 +102,4 @@ async def ekle(ctx, emoji: discord.PartialEmoji, name: str = None):
     except Exception as e:
         await ctx.send(f"Ekleyemedim kanka hata çıktı: {e}")
 
-bot.run("DISCORD_TOKEN")
+bot.run(DISCORD_TOKEN)
