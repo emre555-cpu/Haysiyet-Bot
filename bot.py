@@ -1,8 +1,13 @@
+import os
+import asyncio
+import aiohttp
 import discord
 from discord.ext import commands
-import aiohttp
-import asyncio
 from google import genai
+
+# Çevre Değişkenlerinden (Environment Variables) Key ve Token çekme
+DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # Gemini Yapay Zeka Ayarı
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
@@ -25,7 +30,7 @@ async def on_ready():
 async def on_member_join(member):
     channel = discord.utils.get(member.guild.text_channels, name="hosgeldin")
     if channel:
-        await channel.send(f"Ooo {member.mention} gelmiş! 🎉 Hoş geldin kanka, adını yaşını yaz da kaydını yapalım.")
+        await channel.send(f"Ooo {member.mention} gelmiş! 🥳 Hoş geldin kanka, adını yaşını yaz da kaydını yapalım.")
 
 @bot.event
 async def on_message(message):
@@ -40,33 +45,23 @@ async def on_message(message):
 
     # 2. Tamamen İnsan Gibi Saran Kanka Sohbeti
     elif bot.user.mentioned_in(message):
-        prompt = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+        prompt = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
         
         if prompt:
             async with message.channel.typing():
                 system_prompt = (
-                    "Sen Discord sunucusunda takılan, herkesin kankası olan, samimi, "
-                    "doğal ve sıcakkanlı bir insansın. Asla 'yapay zeka' veya resmi bir asistan gibi konuşma. "
-                    "Klavyeden yazan normal bir genç gibi samimi, kısa-orta uzunlukta, akıcı ve sohbeti saran bir dille cevap ver. "
-                    "Gereksiz uzatma, resmiyet yapma."
+                    "Sen Discord sunucusunda samimi, kafa, argoyu dozunda kullanan, sokak ağzıyla konuşan "
+                    "genç bir mahalle kankası gibisin. 'Kanka', 'la', 'olum', 'lan', 'ya' gibi samimi kelimeler kullan. "
+                    "Asla bir yapay zeka veya asistan gibi resmi konuşma! Kısa, öz ve mizahi cevaplar ver."
                 )
                 
-                # Yoğunluk (503) Hatalarına Karşı Otomatik Deneme Sistemi
-                response = None
-                for _ in range(3):
-                    try:
-                        response = ai_client.models.generate_content(
-                            model='gemini-3.8-flash',
-                            contents=f"{system_prompt}\n\nKullanıcı: {prompt}"
-                        )
-                        if response and response.text:
-                            break
-                    except Exception:
-                        await asyncio.sleep(1) # Hata alırsa 1 saniye bekleyip tekrar dener
-                
-                if response and response.text:
+                try:
+                    response = ai_client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=f"{system_prompt}\nKullanıcı dedi ki: {prompt}"
+                    )
                     await message.reply(response.text)
-                else:
+                except Exception as e:
                     await message.reply("Kanka sunucu şu an biraz yoğun, tekrar yazsana bi.")
 
     await bot.process_commands(message)
@@ -95,10 +90,11 @@ async def kayit(ctx, member: discord.Member, isim: str, yas: int):
 async def ekle(ctx, emoji: discord.PartialEmoji, name: str = None):
     if not name:
         name = emoji.name
+
     try:
         image_bytes = await emoji.read()
         new_emoji = await ctx.guild.create_custom_emoji(name=name, image=image_bytes)
-        await ctx.send(f"Ekledim emojiyi, hayırlı olsun: {new_emoji}")
+        await ctx.send(f"Ekeledim emojiyi, hayırlı olsun: {new_emoji}")
     except Exception as e:
         await ctx.send(f"Ekleyemedim kanka hata çıktı: {e}")
 
